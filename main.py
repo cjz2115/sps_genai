@@ -40,3 +40,34 @@ def generate_text(request: TextGenerationRequest):
 def get_embedding(request: EmbeddingRequest):
     vector = nlp(request.word).vector
     return {"word": request.word, "embedding": vector.tolist()}
+
+
+# ---- CNN image classifier ----
+import io
+import torch
+from fastapi import UploadFile, File
+from PIL import Image
+from torchvision import transforms
+from app.cnn import CNN
+
+class_names = ["airplane", "automobile", "bird", "cat", "deer",
+               "dog", "frog", "horse", "ship", "truck"]
+
+cnn = CNN()
+cnn.load_state_dict(torch.load("app/cnn.pth", map_location="cpu"))
+cnn.eval()
+
+image_transform = transforms.Compose([
+    transforms.Resize((64, 64)),
+    transforms.ToTensor(),
+])
+
+
+@app.post("/predict_image")
+async def predict_image(file: UploadFile = File(...)):
+    image = Image.open(io.BytesIO(await file.read())).convert("RGB")
+    x = image_transform(image).unsqueeze(0)
+    with torch.no_grad():
+        output = cnn(x)
+    predicted = output.argmax(dim=1).item()
+    return {"class": class_names[predicted]}
