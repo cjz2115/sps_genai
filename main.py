@@ -71,3 +71,27 @@ async def predict_image(file: UploadFile = File(...)):
         output = cnn(x)
     predicted = output.argmax(dim=1).item()
     return {"class": class_names[predicted]}
+
+
+import io
+import torch
+from fastapi.responses import StreamingResponse
+from torchvision.utils import make_grid
+from torchvision.transforms.functional import to_pil_image
+from app.gan import Generator
+
+gan_generator = Generator()
+gan_generator.load_state_dict(torch.load("app/gan_generator.pth", map_location="cpu"))
+gan_generator.eval()
+
+
+@app.get("/generate_digits")
+def generate_digits(n: int = 16):
+    with torch.no_grad():
+        z = torch.randn(n, 100)
+        imgs = (gan_generator(z) + 1) / 2
+    grid = make_grid(imgs, nrow=4)
+    buf = io.BytesIO()
+    to_pil_image(grid).save(buf, format="PNG")
+    buf.seek(0)
+    return StreamingResponse(buf, media_type="image/png")
